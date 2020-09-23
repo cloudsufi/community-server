@@ -193,7 +193,7 @@ export class FileResourceStore implements ResourceStore {
     const files = await fsPromises.readdir(path);
     const match = files.find((file): any => !file.startsWith('.metadata'));
     if (typeof match === 'string') {
-      throw new ConflictHttpError('Container is not empty.');
+      throw new ConflictHttpError('Can only delete empty containers.');
     }
 
     // Only delete the metadata file as auxiliary resource because this is the only file created by this store.
@@ -282,10 +282,13 @@ export class FileResourceStore implements ResourceStore {
     const childURIs: string[] = [];
     for (const childName of files) {
       try {
-        const childURI = this.resourceMapper.mapFilePathToUrl(joinPath(path, childName));
         const childStats = await fsPromises.lstat(joinPath(path, childName));
         if (!childStats.isFile() && !childStats.isDirectory()) {
           continue;
+        }
+        let childURI = this.resourceMapper.mapFilePathToUrl(joinPath(path, childName));
+        if (childStats.isDirectory()) {
+          childURI = ensureTrailingSlash(childURI);
         }
 
         quads.push(...this.metadataController.generateResourceQuads(childURI, childStats));
