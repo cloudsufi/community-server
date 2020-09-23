@@ -50,8 +50,8 @@ export class ExtensionBasedMapper implements FileIdentifierMapper {
    *
    * @returns Absolute path of the file.
    */
-  public mapUrlToFilePath(identifier: ResourceIdentifier, id = ''): string {
-    return this.getAbsolutePath(this.getRelativePath(identifier), id);
+  public mapUrlToFilePath(identifier: ResourceIdentifier): string {
+    return this.getAbsolutePath(this.getRelativePath(identifier));
   }
 
   /**

@@ -3,7 +3,7 @@ import { createReadStream, createWriteStream, promises as fsPromises } from 'fs'
 import { posix } from 'path';
 import type { Readable } from 'stream';
 import { DataFactory } from 'n3';
-import type { Quad } from 'rdf-js';
+import type { NamedNode, Quad } from 'rdf-js';
 import streamifyArray from 'streamify-array';
 import type { Representation } from '../ldp/representation/Representation';
 import { RepresentationMetadata } from '../ldp/representation/RepresentationMetadata';
@@ -16,7 +16,7 @@ import { UnsupportedMediaTypeHttpError } from '../util/errors/UnsupportedMediaTy
 import type { InteractionController } from '../util/InteractionController';
 import type { MetadataController } from '../util/MetadataController';
 import { CONTENT_TYPE, DCTERMS, HTTP, POSIX, RDF, XSD } from '../util/UriConstants';
-import { toTypedLiteral } from '../util/UriUtil';
+import { toNamedNode, toTypedLiteral } from '../util/UriUtil';
 import { ensureTrailingSlash } from '../util/Util';
 import type { ExtensionBasedMapper } from './ExtensionBasedMapper';
 import type { ResourceStore } from './ResourceStore';
@@ -243,11 +243,11 @@ export class FileResourceStore implements ResourceStore {
    */
   private async getDirectoryRepresentation(path: string, stats: Stats): Promise<Representation> {
     const files = await fsPromises.readdir(path);
-    const quads: Quad[] = [];
 
-    const containerURI = this.resourceMapper.mapFilePathToUrl(path);
+    const containerURI = DataFactory.namedNode(this.resourceMapper.mapFilePathToUrl(path));
 
-    quads.push(...this.metadataController.generateResourceQuads(containerURI, stats));
+    const quads = this.metadataController.generateResourceQuads(containerURI, true);
+    quads.push(...this.generatePosixQuads(containerURI, stats));
     quads.push(...await this.getDirChildrenQuadRepresentation(files, path, containerURI));
 
     let rawMetadata: Quad[] = [];
@@ -258,9 +258,11 @@ export class FileResourceStore implements ResourceStore {
       // Metadata file doesn't exist so lets keep `rawMetaData` an empty array.
     }
 
-    const metadata = new RepresentationMetadata(containerURI).addQuads(rawMetadata)
-      .set(DCTERMS.modified, toTypedLiteral(stats.mtime.toISOString(), XSD.dateTime))
-      .set(CONTENT_TYPE, INTERNAL_QUADS);
+    const metadata = new RepresentationMetadata(containerURI, {
+      [DCTERMS.modified]: toTypedLiteral(stats.mtime.toISOString(), XSD.dateTime),
+      [CONTENT_TYPE]: INTERNAL_QUADS,
+    });
+    metadata.addQuads(rawMetadata);
 
     return {
       binary: false,
@@ -277,7 +279,8 @@ export class FileResourceStore implements ResourceStore {
    *
    * @returns A promise containing all quads.
    */
-  private async getDirChildrenQuadRepresentation(files: string[], path: string, containerURI: string): Promise<Quad[]> {
+  private async getDirChildrenQuadRepresentation(files: string[], path: string, containerURI: NamedNode):
+  Promise<Quad[]> {
     const quads: Quad[] = [];
     const childURIs: string[] = [];
     for (const childName of files) {
@@ -291,7 +294,9 @@ export class FileResourceStore implements ResourceStore {
           childURI = ensureTrailingSlash(childURI);
         }
 
-        quads.push(...this.metadataController.generateResourceQuads(childURI, childStats));
+        const subject = DataFactory.namedNode(childURI);
+        quads.push(...this.metadataController.generateResourceQuads(subject, childStats.isDirectory()));
+        quads.push(...this.generatePosixQuads(subject, childStats));
         childURIs.push(childURI);
       } catch {
         // Skip the child if there is an error.
@@ -301,6 +306,23 @@ export class FileResourceStore implements ResourceStore {
     const containsQuads = this.metadataController.generateContainerContainsResourceQuads(containerURI, childURIs);
 
     return quads.concat(containsQuads);
+  }
+
+  /**
+   * Helper function to add file system related metadata
+   * @param subject - Subject for the new quads.
+   * @param stats - Stats of the file/directory corresponding to the resource.
+   */
+  private generatePosixQuads(subject: NamedNode, stats: Stats): Quad[] {
+    const quads: Quad[] = [];
+    quads.push(DataFactory.quad(subject, toNamedNode(POSIX.size), toTypedLiteral(stats.size, XSD.integer)));
+    quads.push(DataFactory.quad(subject,
+      toNamedNode(DCTERMS.modified),
+      toTypedLiteral(stats.mtime.toISOString(), XSD.dateTime)));
+    quads.push(DataFactory.quad(subject,
+      toNamedNode(POSIX.mtime),
+      toTypedLiteral(Math.floor(stats.mtime.getTime() / 1000), XSD.integer)));
+    return quads;
   }
 
   /**
