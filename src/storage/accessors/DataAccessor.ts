@@ -1,0 +1,81 @@
+import type { Readable } from 'stream';
+import type { Patch } from '../../ldp/http/Patch';
+import type { Representation } from '../../ldp/representation/Representation';
+import type { RepresentationMetadata } from '../../ldp/representation/RepresentationMetadata';
+import type { ResourceIdentifier } from '../../ldp/representation/ResourceIdentifier';
+
+/**
+ * A DataAccessor is the building block closest to the actual data storage.
+ * It should not worry about most Solid logic, most of that will be handled before it is called.
+ * There are a few things it still needs to do, and it is very important every implementation does this:
+ *  * If the input identifier ends with a slash, it should be assumed the identifier is targeting a container.
+ *  * Similarly, if there is no trailing slash it should assume a data resource.
+ *  * It should always throw a NotFoundHttpError if it does not have data matching the input identifier.
+ *  * The only exception is the `getNormalizedMetadata` function where both versions of the identifier
+ *    need to be checked (both with and without slash).
+ *  * DataAccessors are responsible for generating the relevant containment triples for containers.
+ */
+export interface DataAccessor {
+  /**
+   * Should throw an UnsupportedHttpError if the DataAccessor does not support storing the given Representation.
+   * @param representation - Incoming Representation.
+   *
+   * @throws UnsupportedHttpError
+   * If it does not support the incoming data.
+   */
+  canHandle: (representation: Representation) => Promise<void>;
+
+  /**
+   * Returns a data stream stored for the given identifier.
+   * It can be assumed that the incoming identifier will always correspond to a data resource.
+   * @param identifier - Identifier for which the data is requested.
+   */
+  getData: (identifier: ResourceIdentifier) => Promise<Readable>;
+
+  /**
+   * Returns the metadata corresponding to the identifier.
+   * @param identifier - Identifier for which the metadata is requested.
+   */
+  getMetadata: (identifier: ResourceIdentifier) => Promise<RepresentationMetadata>;
+
+  /**
+   * Returns the metadata matching the identifier, ignoring the presence of a trailing slash or not.
+   * This is used to support the following part of the spec:
+   * "If two URIs differ only in the trailing slash, and the server has associated a resource with one of them,
+   *  then the other URI MUST NOT correspond to another resource."
+   * @param identifier - Identifier that needs to be checked.
+   */
+  getNormalizedMetadata: (identifier: ResourceIdentifier) => Promise<RepresentationMetadata>;
+
+  /**
+   * Writes data and metadata for a data resource.
+   * If any data and/or metadata exist for the given identifier, it should be overwritten.
+   * @param identifier - Identifier of the resource.
+   * @param data - Data to store.
+   * @param metadata - Optional metadata to store.
+   */
+  writeDataResource: (identifier: ResourceIdentifier, data: Readable, metadata?: RepresentationMetadata) =>
+  Promise<void>;
+
+  /**
+   * Writes metadata for a container.
+   * If the container does not exist yet it should be created,
+   * if it does its metadata should be overwritten, except for the containment triples.
+   * @param identifier - Identifier of the container.
+   * @param metadata - Optional metadata to store.
+   */
+  writeContainer: (identifier: ResourceIdentifier, metadata?: RepresentationMetadata) => Promise<void>;
+
+  /**
+   * Modifies the resource based on the given Patch.
+   * @param identifier - Resource to modify.
+   * @param patch - Patch specifying how the resource should be modified.
+   */
+  modifyResource: (identifier: ResourceIdentifier, patch: Patch) => Promise<void>;
+
+  /**
+   * Deletes the resource and its corresponding metadata.
+   * @param identifier - Resource to delete.
+   */
+  deleteResource: (identifier: ResourceIdentifier) => Promise<void>;
+}
