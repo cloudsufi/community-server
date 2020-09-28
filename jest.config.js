@@ -17,7 +17,8 @@ module.exports = {
   "collectCoverage": true,
   "coveragePathIgnorePatterns": [
     "/node_modules/",
-    "/src/init/CliRunner.ts"
+    "/src/init/CliRunner.ts",
+    "/test/"
   ],
   "coverageThreshold": {
     "./src": {
