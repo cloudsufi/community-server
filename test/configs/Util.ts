@@ -11,7 +11,10 @@ import {
   BasicRequestParser,
   BasicTargetExtractor,
   CompositeAsyncHandler,
+  DataAccessorBasedStore,
   DeleteOperationHandler,
+  ExtensionBasedMapper,
+  FileDataAccessor,
   FileResourceStore,
   GetOperationHandler,
   InMemoryResourceStore,
@@ -29,7 +32,6 @@ import {
   UrlContainerManager,
   WebAclAuthorizer,
 } from '../../index';
-import { ExtensionBasedMapper } from '../../src/storage/ExtensionBasedMapper';
 
 export const BASE = 'http://test.com';
 
@@ -51,6 +53,21 @@ export const getFileResourceStore = (base: string, rootFilepath: string): FileRe
     new ExtensionBasedMapper(base, rootFilepath),
     new InteractionController(),
     new MetadataController(),
+  );
+
+/**
+ * Gives a file data accessor store based on (default) runtime config.
+ * @param base - Base URL.
+ * @param rootFilepath - The root file path.
+ *
+ * @returns The data accessor based store.
+ */
+export const getFileDataAccessorStore = (base: string, rootFilepath: string): DataAccessorBasedStore =>
+  new DataAccessorBasedStore(
+    new FileDataAccessor(new ExtensionBasedMapper(base, rootFilepath), new MetadataController()),
+    base,
+    new MetadataController(),
+    new UrlContainerManager(base),
   );
 
 /**

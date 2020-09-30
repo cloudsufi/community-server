@@ -1,21 +1,32 @@
 import { mkdirSync } from 'fs';
 import * as rimraf from 'rimraf';
 import type { HttpHandler } from '../../src/server/HttpHandler';
+import { FileBasedDataAccessorConfig } from '../configs/FileBasedDataAccessorConfig';
 import { FileResourceStoreConfig } from '../configs/FileResourceStoreConfig';
+import type { ServerConfig } from '../configs/ServerConfig';
 import { BASE, getRootFilePath } from '../configs/Util';
 import { FileTestHelper } from '../util/TestHelpers';
 
-describe('A server using a FileResourceStore', (): void => {
+const fileResourceStore: [string, (rootFilePath: string) => ServerConfig] = [
+  'FileResourceStore',
+  (rootFilePath: string): ServerConfig => new FileResourceStoreConfig(BASE, rootFilePath),
+];
+const dataAccessorStore: [string, (rootFilePath: string) => ServerConfig] = [
+  'FileDataAccessorBasedStore',
+  (rootFilePath: string): ServerConfig => new FileBasedDataAccessorConfig(BASE, rootFilePath),
+];
+
+describe.each([ fileResourceStore, dataAccessorStore ])('A server using a %s', (name, configFn): void => {
   describe('without acl', (): void => {
     let rootFilePath: string;
-    let config: FileResourceStoreConfig;
+    let config: ServerConfig;
     let handler: HttpHandler;
     let fileHelper: FileTestHelper;
 
     beforeAll(async(): Promise<void> => {
-      rootFilePath = getRootFilePath('FileResourceStore');
+      rootFilePath = getRootFilePath(name);
       mkdirSync(rootFilePath, { recursive: true });
-      config = new FileResourceStoreConfig(BASE, rootFilePath);
+      config = configFn(rootFilePath);
       handler = config.getHttpHandler();
       fileHelper = new FileTestHelper(handler, new URL(BASE));
     });
