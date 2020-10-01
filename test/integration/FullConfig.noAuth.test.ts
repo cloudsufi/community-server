@@ -1,7 +1,11 @@
 import { mkdirSync } from 'fs';
 import * as rimraf from 'rimraf';
 import type { HttpHandler } from '../../src/server/HttpHandler';
-import { FileBasedDataAccessorConfig } from '../configs/FileBasedDataAccessorConfig';
+import { FileDataAccessor } from '../../src/storage/accessors/FileDataAccessor';
+import { InMemoryDataAccessor } from '../../src/storage/accessors/InMemoryDataAccessor';
+import { ExtensionBasedMapper } from '../../src/storage/ExtensionBasedMapper';
+import { MetadataController } from '../../src/util/MetadataController';
+import { DataAccessorBasedConfig } from '../configs/DataAccessorBasedConfig';
 import { FileResourceStoreConfig } from '../configs/FileResourceStoreConfig';
 import type { ServerConfig } from '../configs/ServerConfig';
 import { BASE, getRootFilePath } from '../configs/Util';
@@ -11,12 +15,20 @@ const fileResourceStore: [string, (rootFilePath: string) => ServerConfig] = [
   'FileResourceStore',
   (rootFilePath: string): ServerConfig => new FileResourceStoreConfig(BASE, rootFilePath),
 ];
-const dataAccessorStore: [string, (rootFilePath: string) => ServerConfig] = [
+const fileDataAccessorStore: [string, (rootFilePath: string) => ServerConfig] = [
   'FileDataAccessorBasedStore',
-  (rootFilePath: string): ServerConfig => new FileBasedDataAccessorConfig(BASE, rootFilePath),
+  (rootFilePath: string): ServerConfig => new DataAccessorBasedConfig(BASE,
+    new FileDataAccessor(new ExtensionBasedMapper(BASE, rootFilePath), new MetadataController())),
+];
+const inMemoryDataAccessorStore: [string, (rootFilePath: string) => ServerConfig] = [
+  'InMemoryDataAccessorBasedStore',
+  (): ServerConfig => new DataAccessorBasedConfig(BASE,
+    new InMemoryDataAccessor(BASE, new MetadataController())),
 ];
 
-describe.each([ fileResourceStore, dataAccessorStore ])('A server using a %s', (name, configFn): void => {
+const configs = [ fileResourceStore, fileDataAccessorStore, inMemoryDataAccessorStore ];
+
+describe.each(configs)('A server using a %s', (name, configFn): void => {
   describe('without acl', (): void => {
     let rootFilePath: string;
     let config: ServerConfig;
@@ -38,7 +50,7 @@ describe.each([ fileResourceStore, dataAccessorStore ])('A server using a %s', (
     it('can add a file to the store, read it and delete it.', async():
     Promise<void> => {
       // POST
-      let response = await fileHelper.createFile('../assets/testfile0.txt', 'testfile0.txt');
+      let response = await fileHelper.createFile('../assets/testfile0.txt', 'testfile0.txt', 'text/plain');
       const id = response._getHeaders().location;
 
       // GET
@@ -53,7 +65,7 @@ describe.each([ fileResourceStore, dataAccessorStore ])('A server using a %s', (
     });
 
     it('can add and overwrite a file.', async(): Promise<void> => {
-      let response = await fileHelper.createFile('../assets/testfile0.txt', 'file.txt');
+      let response = await fileHelper.createFile('../assets/testfile0.txt', 'file.txt', 'text/plain');
       const id = response._getHeaders().location;
 
       // GET
@@ -96,7 +108,7 @@ describe.each([ fileResourceStore, dataAccessorStore ])('A server using a %s', (
       await fileHelper.createFolder('testfolder0/');
 
       // Create file
-      let response = await fileHelper.createFile('../assets/testfile0.txt', 'testfolder0/testfile0.txt');
+      let response = await fileHelper.createFile('../assets/testfile0.txt', 'testfolder0/testfile0.txt', 'text/plain');
       const id = response._getHeaders().location;
 
       // GET File
@@ -117,7 +129,7 @@ describe.each([ fileResourceStore, dataAccessorStore ])('A server using a %s', (
       const folderId = response._getHeaders().location;
 
       // Create file
-      await fileHelper.createFile('../assets/testfile0.txt', 'testfolder1/testfile0.txt');
+      await fileHelper.createFile('../assets/testfile0.txt', 'testfolder1/testfile0.txt', 'text/plain');
 
       // Try DELETE folder
       response = await fileHelper.simpleCall(new URL(folderId), 'DELETE', {});
@@ -162,7 +174,7 @@ describe.each([ fileResourceStore, dataAccessorStore ])('A server using a %s', (
       const subFolderId = response._getHeaders().location;
 
       // Create file
-      response = await fileHelper.createFile('../assets/testfile0.txt', 'testfolder3/testfile0.txt');
+      response = await fileHelper.createFile('../assets/testfile0.txt', 'testfolder3/testfile0.txt', 'text/plain');
       const fileId = response._getHeaders().location;
 
       response = await fileHelper.getFolder(folderId);
@@ -181,7 +193,7 @@ describe.each([ fileResourceStore, dataAccessorStore ])('A server using a %s', (
     });
 
     it('can upload and delete a image.', async(): Promise<void> => {
-      let response = await fileHelper.createFile('../assets/testimage.png', 'image.png');
+      let response = await fileHelper.createFile('../assets/testimage.png', 'image.png', 'image/png');
       const fileId = response._getHeaders().location;
 
       // GET

@@ -1,20 +1,24 @@
 import { copyFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import * as rimraf from 'rimraf';
+import { FileDataAccessor } from '../../src/storage/accessors/FileDataAccessor';
+import { ExtensionBasedMapper } from '../../src/storage/ExtensionBasedMapper';
+import { MetadataController } from '../../src/util/MetadataController';
 import { ensureTrailingSlash } from '../../src/util/Util';
-import { AuthenticatedFileBasedDataAccessorConfig } from '../configs/AuthenticatedFileBasedDataAccessorConfig';
+import { AuthenticatedDataAccessorBasedConfig } from '../configs/AuthenticatedDataAccessorBasedConfig';
 import { AuthenticatedFileResourceStoreConfig } from '../configs/AuthenticatedFileResourceStoreConfig';
 import type { ServerConfig } from '../configs/ServerConfig';
 import { BASE, getRootFilePath } from '../configs/Util';
 import { AclTestHelper, FileTestHelper } from '../util/TestHelpers';
 
 const fileResourceStore: [string, (rootFilePath: string) => ServerConfig] = [
-  'FileResourceStore',
+  'AuthenticatedFileResourceStore',
   (rootFilePath: string): ServerConfig => new AuthenticatedFileResourceStoreConfig(BASE, rootFilePath),
 ];
 const dataAccessorStore: [string, (rootFilePath: string) => ServerConfig] = [
-  'FileDataAccessorBasedStore',
-  (rootFilePath: string): ServerConfig => new AuthenticatedFileBasedDataAccessorConfig(BASE, rootFilePath),
+  'AuthenticatedFileDataAccessorBasedStore',
+  (rootFilePath: string): ServerConfig => new AuthenticatedDataAccessorBasedConfig(BASE,
+    new FileDataAccessor(new ExtensionBasedMapper(BASE, rootFilePath), new MetadataController())),
 ];
 
 describe.each([ fileResourceStore, dataAccessorStore ])('A server using a %s', (name, configFn): void => {
@@ -47,7 +51,7 @@ describe.each([ fileResourceStore, dataAccessorStore ])('A server using a %s', (
       await aclHelper.setSimpleAcl({ read: true, write: true, append: true }, 'agent');
 
       // Create file
-      let response = await fileHelper.createFile('../assets/testfile2.txt', 'testfile2.txt');
+      let response = await fileHelper.createFile('../assets/testfile2.txt', 'testfile2.txt', 'text/plain');
       const id = response._getHeaders().location;
 
       // Get file
@@ -67,7 +71,7 @@ describe.each([ fileResourceStore, dataAccessorStore ])('A server using a %s', (
       await aclHelper.setSimpleAcl({ read: true, write: true, append: true }, 'authenticated');
 
       // Try to create file
-      const response = await fileHelper.createFile('../assets/testfile2.txt', 'testfile2.txt', true);
+      const response = await fileHelper.createFile('../assets/testfile2.txt', 'testfile2.txt', 'text/plain', true);
       expect(response.statusCode).toBe(401);
     });
 
@@ -77,7 +81,7 @@ describe.each([ fileResourceStore, dataAccessorStore ])('A server using a %s', (
       await aclHelper.setSimpleAcl({ read: true, write: false, append: false }, 'agent');
 
       // Try to create file
-      let response = await fileHelper.createFile('../assets/testfile2.txt', 'testfile2.txt', true);
+      let response = await fileHelper.createFile('../assets/testfile2.txt', 'testfile2.txt', 'text/plain', true);
       expect(response.statusCode).toBe(401);
 
       // GET permanent file
